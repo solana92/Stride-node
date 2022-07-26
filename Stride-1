@@ -1,0 +1,71 @@
+cập nhật gói và các phần phụ
+
+sudo apt update && sudo apt upgrade -y
+sudo apt install curl tar wget clang pkg-config libssl-dev jq build-essential bsdmainutils git make ncdu gcc git jq chrony liblz4-tool -y
+
+wget -O stride.sh https://raw.githubusercontent.com/kj89/testnet_manuals/main/stride/stride.sh && chmod +x stride.sh && ./stride.sh
+recover wallet thì chạy :  $strided keys add <WALLET-NAME> --recover ( cần dùng lại ví cũ thì chạy , ko thì bỏ )
+
+show address thì chạy  : $strided keys show <WALLET-NAME> --bech=acc ( cần xem thì chạy , ko thì thôi )
+                         $strided keys show <WALLET-NAME> --bech=val
+                         
+**Vào discord xin faucet
+2. state sync
+có thể để tự sync từng block 1 thì dừng tại đây chờ check :strided status 2>&1 | jq .SyncInfo
+hoặc dùng lệnh sau: 
+sudo systemctl stop strided
+
+strided tendermint unsafe-reset-all --home $HOME/.stride
+
+SEEDS=""; \
+PEERS="69249bb18f5cae0616338e78d91036d60358dc4b@23.88.100.175:46656"; \
+sed -i.bak -e "s/^seeds *=.*/seeds = \"$SEEDS\"/; s/^persistent_peers *=.*/persistent_peers = \"$PEERS\"/" $HOME/.stride/config/config.toml
+
+wget -O $HOME/.stride/config/addrbook.json "https://raw.githubusercontent.com/StakeTake/guidecosmos/main/stride/STRIDE-1/addrbook.json"
+
+SNAP_RPC=http://stride.stake-take.com:46657
+LATEST_HEIGHT=$(curl -s $SNAP_RPC/block | jq -r .result.block.header.height); \
+BLOCK_HEIGHT=$((LATEST_HEIGHT - 2000)); \
+TRUST_HASH=$(curl -s "$SNAP_RPC/block?height=$BLOCK_HEIGHT" | jq -r .result.block_id.hash)
+
+echo $LATEST_HEIGHT $BLOCK_HEIGHT $TRUST_HASH
+
+sed -i.bak -E "s|^(enable[[:space:]]+=[[:space:]]+).*$|\1true| ; \
+s|^(rpc_servers[[:space:]]+=[[:space:]]+).*$|\1\"$SNAP_RPC,$SNAP_RPC\"| ; \
+s|^(trust_height[[:space:]]+=[[:space:]]+).*$|\1$BLOCK_HEIGHT| ; \
+s|^(trust_hash[[:space:]]+=[[:space:]]+).*$|\1\"$TRUST_HASH\"| ; \
+s|^(seeds[[:space:]]+=[[:space:]]+).*$|\1\"\"|" $HOME/.stride/config/config.toml
+
+sudo systemctl restart strided && journalctl -u strided -f -o cat
+
+
+3. Kiểm tra node đã đồng bộ xong chưa. Nếu "catching_up” = false là sync xong
+strided status 2>&1 | jq .SyncInfo
+
+với node đã đổi port như trên thì : curl -s localhost:26957/status | jq '.result."sync_info",.result."validator_info",.result."node_info"."network"'
+4. Tạo validator
+
+strided tx staking create-validator \
+--amount=9000000ustrd \
+--pubkey=$(strided tendermint show-validator) \
+--moniker=nguyen \
+--chain-id=STRIDE-1 \
+--commission-rate="0.07" \
+--commission-max-rate="0.1" \
+--commission-max-change-rate="0.05" \
+--min-self-delegation="1" \
+--fees=250ustrd \
+--gas=200000 \
+--from=nguyen \
+--node="http://127.0.0.1:26957" \
+--website="" \
+--details="I Love Stride" \
+-y
+
+chú ý : với node chưa đổi port thì bỏ dòng --node="http://127.0.0.1:26957" \
+
+***ok ok ok ****
+*delete node :
+
+sudo systemctl stop strided && sudo systemctl disable strided
+rm -rf $HOME/stride $HOME/.stride /etc/systemd/system/strided.service $HOME/go/bin/strided
